@@ -36,7 +36,8 @@ This script automatically opens Safari, logs you in, and clocks you in/out at sc
 
 1. Clone this repo.
 2. Run `npm install`.
-3. Create a `.env` file with your credentials and site info.
+3. Create a `.env` file with your credentials and site info -> `cp .env.example .env`.
+
 4. Edit your schedule in `safari_automation.js`.
 5. Run the script with `node safari_automation.js`.
 
