@@ -4,7 +4,7 @@
 // i'm not sure if it's the best way to do it, but it works.
 
 require('dotenv').config();
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const cron = require('node-cron');
 
@@ -14,115 +14,149 @@ const NAME = process.env.NAME || 'User';
 
 // === SCHEDULE TIMES ===
 // Set times here in 12-hour format (h:mm:ss AM/PM)
-const CLOCK_IN_TIME_12H = '8:10:00 AM';
-const CLOCK_OUT_TIME_12H = '4:10:00 PM';
+const CLOCK_IN_TIME_12H = '8:29:44 AM';
+const CLOCK_OUT_TIME_12H = '4:29:44 PM';
 
 function parse12HourTo24Hour(timeStr) {
- const [time, ampm] = timeStr.trim().split(/\s+/);
- let [hour, minute, second] = time.split(':').map(Number);
- if (ampm.toUpperCase() === 'PM' && hour !== 12) hour += 12;
- if (ampm.toUpperCase() === 'AM' && hour === 12) hour = 0;
- return [hour, minute, second];
+  // timeStr: 'h:mm:ss AM/PM'
+  const [time, ampm] = timeStr.trim().split(/\s+/);
+  let [hour, minute, second] = time.split(':').map(Number);
+  if (ampm.toUpperCase() === 'PM' && hour !== 12) hour += 12;
+  if (ampm.toUpperCase() === 'AM' && hour === 12) hour = 0;
+  return [hour, minute, second];
 }
 
 function time12hToCron(timeStr) {
- const [hour, minute, second] = parse12HourTo24Hour(timeStr);
- return `${second} ${minute} ${hour} * * *`;
+  const [hour, minute, second] = parse12HourTo24Hour(timeStr);
+  return `${second} ${minute} ${hour} * * *`;
 }
 
 const CLOCK_IN_CRON = time12hToCron(CLOCK_IN_TIME_12H);
 const CLOCK_OUT_CRON = time12hToCron(CLOCK_OUT_TIME_12H);
-
-
-// did this because i hate military time. so cooked
-function formatAMPM(timeStr) {
- let [hour, minute, second] = timeStr.split(':').map(Number);
- const ampm = hour >= 12 ? 'PM' : 'AM';
- hour = hour % 12;
- if (hour === 0) hour = 12;
- return `${hour}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')} ${ampm}`;
-}
 
 // For display, just use the 12-hour format variables
 const CLOCK_IN_TIME_DISPLAY = CLOCK_IN_TIME_12H;
 const CLOCK_OUT_TIME_DISPLAY = CLOCK_OUT_TIME_12H;
 
 function logMessage(message) {
- const logLine = `${new Date().toISOString()} - ${message}\n`;
- fs.appendFileSync('automation.log', logLine);
+  const logLine = `${new Date().toISOString()} - ${message}\n`;
+  fs.appendFileSync('automation.log', logLine);
 }
 
+// Prevent sleep functionality
+let caffeinateProcess = null;
+
+function preventSleep() {
+  try {
+    // Start caffeinate to prevent sleep
+    caffeinateProcess = spawn('caffeinate', ['-i']);
+    console.log('🛡️  Sleep prevention enabled - Mac will stay awake');
+    logMessage('Sleep prevention enabled');
+  } catch (e) {
+    console.error('Failed to prevent sleep:', e);
+  }
+}
+
+function allowSleep() {
+  try {
+    if (caffeinateProcess) {
+      caffeinateProcess.kill();
+      caffeinateProcess = null;
+      console.log('😴 Sleep prevention disabled - Mac can sleep normally');
+      logMessage('Sleep prevention disabled');
+    }
+  } catch (e) {
+    console.error('Failed to allow sleep:', e);
+  }
+}
+
+// Input lock functionality
+function lockInput() {
+  try {
+    execSync(`osascript -e 'tell application "System Events" to set UI elements enabled to false'`);
+    console.log('🔒 Input locked - mouse and keyboard disabled');
+    logMessage('Input locked during automation');
+  } catch (e) {
+    console.error('Failed to lock input:', e);
+  }
+}
+
+function unlockInput() {
+  try {
+    execSync(`osascript -e 'tell application "System Events" to set UI elements enabled to true'`);
+    console.log('🔓 Input unlocked - mouse and keyboard re-enabled');
+    logMessage('Input unlocked after automation');
+  } catch (e) {
+    console.error('Failed to unlock input:', e);
+  }
+}
+
+// Handle graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\n🛑 Shutting down automation...');
+  unlockInput();
+  allowSleep();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('\n🛑 Shutting down automation...');
+  unlockInput();
+  allowSleep();
+  process.exit(0);
+});
 
 if (!SITE_URL || !PASSWORD) {
- console.error('Please set SITE_URL and PASSWORD in your .env file.');
- process.exit(1);
+  console.error('Please set SITE_URL and PASSWORD in your .env file.');
+  process.exit(1);
 }
-
-// I control web pages with a tabs and enters with keystrokes if needed
 
 function runAutomation() {
- const appleScript = `
- tell application "Safari"
-   activate
-   make new document
-   delay 0.5
-   set URL of front document to "${SITE_URL}"
- end tell
+  const appleScript = `
+  tell application "Safari"
+      activate
+      make new document
+      delay 0.5
+      set URL of front document to "${SITE_URL}"
+  end tell
 
- delay 5 -- wait for page to load and password field to be focused
+  delay 5 -- wait for page to load and password field to be focused
 
- tell application "System Events"
-   tell process "Safari"
-     set frontmost to true
-     delay 0.5
-     keystroke "${PASSWORD}"
-     keystroke return
-     delay 5
-     keystroke tab
-     keystroke tab
-     keystroke tab
-     keystroke tab
-     keystroke tab
-     delay 0.5
-     keystroke return -- press Enter after tabbing 5 times
-   end tell
- end tell
+  tell application "System Events"
+      tell process "Safari"
+          set frontmost to true
+          delay 0.5
+          keystroke "${PASSWORD}"
+          keystroke return
+          delay 5
+          keystroke tab
+          keystroke tab
+          keystroke tab
+          keystroke tab
+          keystroke tab
+          delay 0.5
+          keystroke return -- press Enter after tabbing 5 times
+      end tell
+  end tell
 
- delay 4
- tell application "Safari"
-   close front window
- end tell
- `;
+  -- delay 1
+  -- tell application "Safari"
+  --     close front window
+  -- end tell
+  `;
 
- fs.writeFileSync('auto_script.scpt', appleScript);
+  fs.writeFileSync('auto_script.scpt', appleScript);
 
- try {
-  execSync('osascript auto_script.scpt', { stdio: 'inherit' });
- } catch (e) {
-  console.error('AppleScript execution failed:', e);
- }
+  try {
+    execSync('osascript auto_script.scpt', { stdio: 'inherit' });
+    console.log('✅ Automation completed successfully');
+  } catch (e) {
+    console.error('❌ AppleScript execution failed:', e);
+  } finally {
+    console.log('🔓 Unlocking input...');
+    unlockInput();
+  }
 }
-
-
-// Schedule for clock in and clock out times
-cron.schedule(CLOCK_IN_CRON, () => {
- const msg = `Hey ${NAME}, you're clocked in!`;
- console.log(msg);
- logMessage(msg);
- runAutomation();
-}); // CLOCK IN: " + CLOCK_IN_TIME_DISPLAY
-cron.schedule(CLOCK_OUT_CRON, () => {
- const msg = `Hey ${NAME}, you're clocked out!`;
- console.log(msg);
- logMessage(msg);
- runAutomation();
-}); // CLOCK OUT: " + CLOCK_OUT_TIME_DISPLAY
-
-// Requires node-cron v3.0.0+ (which supports the tz option).
-// const centralTZ = 'America/Chicago';
-// cron.schedule('44 29 8 * * *', runAutomation, { timezone: centralTZ });
-// cron.schedule('44 29 16 * * *', runAutomation, { timezone: centralTZ });
-// console.log('Automation scheduled for 8:29:44 AM and 4:29:44 PM Central Time (America/Chicago).');
 
 function getNextEventTime(targetTime12h) {
   const now = new Date();
@@ -163,6 +197,39 @@ function showCountdown() {
   }, 1000);
 }
 
+// Start sleep prevention when automation starts
+preventSleep();
+
 showCountdown();
 
+// Schedule for clock in and clock out times
+cron.schedule(CLOCK_IN_CRON, () => {
+  const msg = `Hey ${NAME}, you're clocked in!`;
+  console.log(msg);
+  logMessage(msg);
+  
+  // Lock input 5 seconds before automation
+  console.log('⏰ Clock-in automation starting in 5 seconds...');
+  setTimeout(() => {
+    console.log('🔒 Locking input for clock-in automation...');
+    lockInput();
+    runAutomation();
+  }, 5000);
+}); // CLOCK IN: " + CLOCK_IN_TIME_DISPLAY
+
+cron.schedule(CLOCK_OUT_CRON, () => {
+  const msg = `Hey ${NAME}, you're clocked out!`;
+  console.log(msg);
+  logMessage(msg);
+  
+  // Lock input 5 seconds before automation
+  console.log('⏰ Clock-out automation starting in 5 seconds...');
+  setTimeout(() => {
+    console.log('🔒 Locking input for clock-out automation...');
+    lockInput();
+    runAutomation();
+  }, 5000);
+}); // CLOCK OUT: " + CLOCK_OUT_TIME_DISPLAY
+
 console.log(`Automation scheduled for ${CLOCK_IN_TIME_DISPLAY} and ${CLOCK_OUT_TIME_DISPLAY} every day.`);
+console.log('💤 Sleep prevention is active - your Mac will stay awake'); 

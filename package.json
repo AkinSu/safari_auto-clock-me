@@ -1,22 +1,29 @@
 {
   "name": "auto-clock-me",
-  "version": "1.1.0",
-  "description": "A script to automate clocking in and out using Safari.",
-  "main": "safari_automation.js",
+  "version": "2.0.0",
+  "description": "Modern automation script for clocking in/out with robust browser automation.",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node safari_automation.js"
+    "start": "node src/index.js",
+    "dev": "node src/index.js --dev",
+    "test": "node src/test.js",
+    "reports": "node src/reports.js",
+    "clock-in": "node src/index.js --clock-in",
+    "clock-out": "node src/index.js --clock-out"
   },
   "keywords": [
     "automation",
     "cron",
-    "safari"
+    "playwright",
+    "timesheet"
   ],
   "author": "Akin",
   "license": "ISC",
   "dependencies": {
     "dotenv": "^16.4.5",
     "node-cron": "^3.0.3",
-    "node-notifier": "^10.0.1"
+    "playwright": "^1.40.0",
+    "winston": "^3.11.0"
   }
 }
 
